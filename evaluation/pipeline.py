@@ -25,6 +25,7 @@ import config
 import evaluate
 from repo_utils import RepoError, log
 from reviewers import claude as claude_reviewer
+from reviewers import claude_reviewpro as review_pro_reviewer
 from reviewers import codex as codex_reviewer
 from reviewers import ocr as ocr_reviewer
 from schema import ReviewInstance, load_instances
@@ -90,6 +91,15 @@ def _review_one_instance(
                 timeout_minutes=timeout_minutes,
                 preview=preview,
             )
+        if reviewer == "review-pro":
+            return review_pro_reviewer.review_instance(
+                instance=instance,
+                repo_dir=repo_dir,
+                results_dir=results_dir,
+                claude_env=reviewer_env,
+                timeout_minutes=timeout_minutes,
+                preview=preview,
+            )
         return claude_reviewer.review_instance(
             instance=instance,
             repo_dir=repo_dir,
@@ -129,8 +139,10 @@ def run_review_stage(
     if reviewer == "ocr":
         ocr_reviewer.ensure_ocr_installed(ocr_command)
         ocr_reviewer.check_env(preview)
-    elif reviewer == "claude":
+    elif reviewer in ("claude", "review-pro"):
         claude_reviewer.ensure_claude_installed()
+        if reviewer == "review-pro":
+            review_pro_reviewer.resolve_review_pro_core()
         if not preview:
             reviewer_env = claude_reviewer.resolve_claude_env()
             log(
@@ -363,7 +375,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     run_parser.add_argument(
         "--reviewer",
-        choices=["ocr", "claude", "codex"],
+        choices=["ocr", "claude", "codex", "review-pro"],
         required=True,
         help="使用哪个评审器",
     )
