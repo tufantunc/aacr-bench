@@ -51,9 +51,20 @@ def ensure_claude_installed() -> None:
 
 
 def resolve_claude_env() -> Dict[str, str]:
-    """从环境变量解析 Claude Code 配置，缺失则早报错。
+    """Resolve Claude Code config from the environment; fail early if incomplete.
 
-    同时设置 CLAUDE_CODE_MAX_RETRIES：优先读环境变量，未设置则使用 config 默认值。
+    Two supported auth paths:
+      - **API key**: ANTHROPIC_BASE_URL + ANTHROPIC_AUTH_TOKEN are both set and are
+        passed through to the CLI.
+      - **Subscription**: neither is set, and the CLI uses its own stored
+        credentials from `claude login`. The model is still pinned via
+        ANTHROPIC_MODEL, so runs stay reproducible either way.
+
+    Setting exactly one of the pair is rejected: a half-configured endpoint
+    silently falls back to stored credentials while looking like it targets a
+    custom endpoint, which would make the run's provenance a lie.
+
+    Also sets CLAUDE_CODE_MAX_RETRIES: env var if present, else the config default.
     """
     missing = config.missing_env_vars(config.CLAUDE_REQUIRED_ENV_VARS)
     if missing:
@@ -61,14 +72,31 @@ def resolve_claude_env() -> Dict[str, str]:
             f"Missing env vars: {', '.join(missing)}. "
             "Run: set -a && source evaluation/.env && set +a"
         )
+
+    endpoint = {
+        name: os.environ[name]
+        for name in config.CLAUDE_OPTIONAL_ENDPOINT_VARS
+        if os.environ.get(name)
+    }
+    if len(endpoint) == 1:
+        present = next(iter(endpoint))
+        absent = [n for n in config.CLAUDE_OPTIONAL_ENDPOINT_VARS if n != present]
+        raise SystemExit(
+            f"{present} is set but {', '.join(absent)} is not. Set both to use an "
+            "API key, or neither to use the CLI's own logged-in credentials."
+        )
+    if endpoint:
+        log(f"Auth: API key via {endpoint[config.CLAUDE_URL_VAR]}")
+    else:
+        log("Auth: CLI stored credentials (no ANTHROPIC_BASE_URL/AUTH_TOKEN set)")
+
     max_retries = os.environ.get(
         config.CLAUDE_MAX_RETRIES_VAR,
         str(config.CLAUDE_MAX_RETRIES_DEFAULT),
     )
     log(f"CLAUDE_CODE_MAX_RETRIES = {max_retries}")
     return {
-        config.CLAUDE_URL_VAR: os.environ[config.CLAUDE_URL_VAR],
-        config.CLAUDE_TOKEN_VAR: os.environ[config.CLAUDE_TOKEN_VAR],
+        **endpoint,
         config.CLAUDE_MODEL_VAR: os.environ[config.CLAUDE_MODEL_VAR],
         config.CLAUDE_MAX_RETRIES_VAR: max_retries,
     }

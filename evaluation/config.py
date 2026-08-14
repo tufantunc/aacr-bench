@@ -112,7 +112,12 @@ OCR_REQUIRED_ENV_VARS: List[str] = [OCR_URL_VAR, OCR_TOKEN_VAR, OCR_MODEL_VAR]
 CLAUDE_URL_VAR = "ANTHROPIC_BASE_URL"
 CLAUDE_TOKEN_VAR = "ANTHROPIC_AUTH_TOKEN"
 CLAUDE_MODEL_VAR = "ANTHROPIC_MODEL"
-CLAUDE_REQUIRED_ENV_VARS: List[str] = [CLAUDE_URL_VAR, CLAUDE_TOKEN_VAR, CLAUDE_MODEL_VAR]
+# Only the model is required: it must be pinned so a run is reproducible.
+# ANTHROPIC_BASE_URL / ANTHROPIC_AUTH_TOKEN are optional — when both are absent,
+# Claude Code falls back to its own stored credentials (subscription OAuth login),
+# which is how a run without a pay-per-token API key works.
+CLAUDE_REQUIRED_ENV_VARS: List[str] = [CLAUDE_MODEL_VAR]
+CLAUDE_OPTIONAL_ENDPOINT_VARS: List[str] = [CLAUDE_URL_VAR, CLAUDE_TOKEN_VAR]
 
 # Claude Code 内置 API retry 配置
 CLAUDE_MAX_RETRIES_VAR = "CLAUDE_CODE_MAX_RETRIES"

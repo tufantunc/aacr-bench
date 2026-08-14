@@ -146,10 +146,8 @@ def run_review_stage(
             review_pro_reviewer.resolve_review_pro_core()
         if not preview:
             reviewer_env = claude_reviewer.resolve_claude_env()
-            log(
-                f"Using model={reviewer_env[config.CLAUDE_MODEL_VAR]} "
-                f"via {reviewer_env[config.CLAUDE_URL_VAR]}"
-            )
+            endpoint = reviewer_env.get(config.CLAUDE_URL_VAR, "CLI stored credentials")
+            log(f"Using model={reviewer_env[config.CLAUDE_MODEL_VAR]} via {endpoint}")
     elif reviewer == "codex":
         codex_reviewer.ensure_codex_installed()
         if not preview:
