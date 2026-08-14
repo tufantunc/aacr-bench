@@ -126,6 +126,7 @@ def run_review_stage(
     concurrency: int = 1,
     ocr_command: str = "ocr",
     max_tools: int = 30,
+    force: bool = False,
 ) -> List[Dict[str, Any]]:
     """执行评审阶段：逐样本评审并落盘结果文件，返回每条状态摘要。
 
@@ -160,6 +161,31 @@ def run_review_stage(
             log(f"CODEX_HOME = {codex_home}")
     else:
         raise ValueError(f"未知的 reviewer: {reviewer}")
+
+    # Resume: an instance whose result file already exists is skipped, so an
+    # interrupted run can be continued by re-issuing the same command with the
+    # same --run-id. Skipping never re-reviews and never reorders: the remaining
+    # instances keep the dataset order fixed by the sampling seed.
+    skipped: List[Dict[str, Any]] = []
+    if not force and not preview:
+        pending: List[ReviewInstance] = []
+        for instance in instances:
+            existing = config.result_path(results_dir, instance.instance_id)
+            if existing.exists():
+                skipped.append({
+                    "instance_id": instance.instance_id,
+                    "status": "skipped",
+                    "result_path": str(existing),
+                })
+            else:
+                pending.append(instance)
+        if skipped:
+            log(f"Resume: skipping {len(skipped)} instance(s) with existing results "
+                f"(use --force to re-review)")
+        instances = pending
+        if not instances:
+            log("Nothing left to review — all instances already have results.")
+            return skipped
 
     repo_groups = _group_instances_by_repo(instances)
     effective_concurrency = max(1, min(concurrency, len(repo_groups)))
@@ -204,7 +230,7 @@ def run_review_stage(
             )
         return group_summary
 
-    summary: List[Dict[str, Any]] = []
+    summary: List[Dict[str, Any]] = list(skipped)
     try:
         if effective_concurrency == 1:
             for group in repo_groups.values():
@@ -336,6 +362,7 @@ def run_pipeline(args) -> int:
             concurrency=args.concurrency,
             ocr_command=args.ocr_command,
             max_tools=args.max_tools,
+            force=args.force,
         )
 
     if args.stage in ("all", "eval"):
@@ -445,6 +472,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--preview",
         action="store_true",
         help="预览模式：只 clone/checkout，不真正调用评审 LLM",
+    )
+    run_parser.add_argument(
+        "--force",
+        action="store_true",
+        help="重新评审已有结果的样本（默认跳过，便于中断后续跑）",
     )
     return parser
 
